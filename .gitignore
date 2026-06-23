@@ -41,3 +41,6 @@ signing.properties
 /tools/
 serviceAccount.json
 node_modules/
+
+# Machine-local Claude Code settings — not for the public repo.
+.claude/settings.local.json
