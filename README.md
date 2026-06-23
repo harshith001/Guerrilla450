@@ -131,4 +131,4 @@ for attribution.
 **Trademarks / affiliation:** Northstar is an independent community project and is **not affiliated
 with, endorsed by, or supported by Royal Enfield**. "Royal Enfield", "Himalayan", and "Tripper" are
 trademarks of their respective owners, used here only descriptively to identify compatible hardware.
-The dash link is unofficial and independent for interoperability — use at your own risk.
+The dash link is unofficial and exists solely for interoperability with hardware you own — use at your own risk.

@@ -28,8 +28,8 @@ trademarks of their respective owners. They are used in Northstar solely in a
 descriptive (nominative) sense to identify the compatible motorcycle and dash
 hardware, and do not imply any endorsement or affiliation.
 
-The dash communication used by Northstar is unofficial and was independent
-for the sole purpose of interoperability with hardware the user already owns.
+The dash communication used by Northstar is unofficial and exists solely
+for interoperability with hardware the user already owns.
 Northstar streams a video feed to the Tripper display and reads its joystick; it
 does not modify, and cannot modify, the motorcycle, its ECU, or any safety system.
 Use at your own risk.
