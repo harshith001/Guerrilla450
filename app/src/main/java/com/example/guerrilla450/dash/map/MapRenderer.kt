@@ -150,7 +150,18 @@ class MapRenderer(private val tiles: TileProvider) {
             drawTileBestEffort(canvas, f.zoom, tx, ty, tmpRect)
         }
 
-        // ── Traffic overlay (memory-only; missing tiles are silently skipped) ──
+        // ── Road route polyline (drawn before traffic so congestion colors paint over the blue) ──
+        if (f.route.size >= 2) {
+            routePath.reset()
+            routePath.moveTo(sx(f.route[0].lng), sy(f.route[0].lat))
+            for (i in 1 until f.route.size) routePath.lineTo(sx(f.route[i].lng), sy(f.route[i].lat))
+            canvas.drawPath(routePath, routeCasing)
+            canvas.drawPath(routePath, routePaint)
+        }
+
+        // ── Traffic overlay on top of route — congestion colors appear ON the blue line,
+        //    matching Google Maps: red/orange/green replace the blue where traffic exists.
+        //    The white casing (11 px) edges still frame the route under the traffic color. ──
         if (f.showTraffic) {
             for (tx in txMin..txMax) for (ty in tyMin..tyMax) {
                 tiles.getTraffic(f.zoom, tx, ty)?.let { bmp ->
@@ -160,15 +171,6 @@ class MapRenderer(private val tiles: TileProvider) {
                     canvas.drawBitmap(bmp, null, tmpRect, trafficPaint)
                 }
             }
-        }
-
-        // ── Road route polyline ──
-        if (f.route.size >= 2) {
-            routePath.reset()
-            routePath.moveTo(sx(f.route[0].lng), sy(f.route[0].lat))
-            for (i in 1 until f.route.size) routePath.lineTo(sx(f.route[i].lng), sy(f.route[i].lat))
-            canvas.drawPath(routePath, routeCasing)
-            canvas.drawPath(routePath, routePaint)
         }
 
         // ── Destination pin ──
