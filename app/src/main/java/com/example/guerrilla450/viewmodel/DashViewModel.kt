@@ -60,6 +60,7 @@ data class DashUiState(
     val showTraffic: Boolean = true,
     val thermal: String = "OK",
     val needsWifiOn: Boolean = false,   // Wi‑Fi radio is off → UI prompts to enable it
+    val dashNearby: Boolean? = null,   // null=unchecked, false=scan ran + dash not visible
     // For the in-app Google Map view
     val riderLat: Double? = null,
     val riderLng: Double? = null,
@@ -425,10 +426,26 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Connection ─────────────────────────────────────────────────────────
 
+    /**
+     * Scan-gated auto-connect: reads cached WiFi scan results (no radio scan triggered, free)
+     * and only starts the full connection flow if the dash AP is visible. When the dash isn't
+     * nearby nothing is acquired — no GPS, no wake lock, no reconnect timer. The manual
+     * [connect] button bypasses this gate entirely.
+     */
+    fun autoConnect() {
+        if (!wifiManager.isWifiEnabled()) return
+        val key = dashConfig.ssid.ifBlank { dashConfig.ssidPrefix }
+        if (wifiManager.findDashSsid(key) == null) {
+            _ui.update { it.copy(dashNearby = false) }
+            return
+        }
+        connect()
+    }
+
     fun connect() {
         userWantsConnection = true
         authAttempts = 0
-        _ui.update { it.copy(errorMessage = null, retryAttempt = 0, needsWifiOn = false) }
+        _ui.update { it.copy(errorMessage = null, retryAttempt = 0, needsWifiOn = false, dashNearby = null) }
 
         // The dash link needs the Wi‑Fi radio on (WifiNetworkSpecifier joins it as a separate
         // per-app network — the phone's current Wi‑Fi/cellular is untouched). Android 10+ won't

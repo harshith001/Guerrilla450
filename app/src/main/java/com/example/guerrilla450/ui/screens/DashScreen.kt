@@ -140,7 +140,7 @@ fun DashScreen(vm: DashViewModel = viewModel()) {
     LaunchedEffect(Unit) {
         if (!autoConnectTried && ui.stage == ConnStage.OFFLINE && hasEssentialPermissions()) {
             autoConnectTried = true
-            vm.connect()
+            vm.autoConnect()  // scan-gated: only connects if dash AP is visible, no battery waste
         }
     }
 
@@ -222,7 +222,9 @@ fun DashScreen(vm: DashViewModel = viewModel()) {
                         )
                         Text(
                             when (ui.stage) {
-                                ConnStage.OFFLINE -> "Turn the dash on, stand near the bike, then tap Connect"
+                                ConnStage.OFFLINE -> if (ui.dashNearby == false)
+                                    "Dash not in range — move near the bike then tap Connect"
+                                    else "Turn the dash on, stand near the bike, then tap Connect"
                                 ConnStage.WIFI    -> "Accept the system dialog if it appears"
                                 ConnStage.AUTH    -> if (ui.retryAttempt > 0)
                                     "Handshake attempt ${ui.retryAttempt} of 4 — this is normal"
