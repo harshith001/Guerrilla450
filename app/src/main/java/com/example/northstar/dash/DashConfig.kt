@@ -1,6 +1,9 @@
 package com.example.northstar.dash
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
 /**
  * Per-rider dash WiFi configuration, persisted on-device.
@@ -12,10 +15,33 @@ import android.content.Context
  * the system dialog once — and then we remember that exact SSID here for direct reconnects.
  *
  * Everything is overridable in Settings for dashes that don't fit the defaults.
+ *
+ * The WiFi password is stored in [EncryptedSharedPreferences] (AES-256-GCM, key in the
+ * Android Keystore). SSID and prefix are non-sensitive and stay in plain SharedPreferences.
+ * On first launch after this change, any plaintext password in the old prefs is migrated
+ * and erased from the unencrypted store.
  */
 class DashConfig private constructor(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences("dash_config", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences =
+        context.applicationContext.getSharedPreferences("dash_config", Context.MODE_PRIVATE)
+
+    private val securePrefs: SharedPreferences = run {
+        val masterKey = MasterKey.Builder(context.applicationContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            context.applicationContext,
+            "dash_config_secure",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
+
+    init {
+        migratePlaintextPassword()
+    }
 
     /** Broadest match across Tripper variants; rider-overridable. */
     var ssidPrefix: String
@@ -28,14 +54,22 @@ class DashConfig private constructor(context: Context) {
         set(v) = prefs.edit().putString(KEY_SSID, v).apply()
 
     var password: String
-        get() = prefs.getString(KEY_PASSWORD, DEFAULT_PASSWORD) ?: DEFAULT_PASSWORD
-        set(v) = prefs.edit().putString(KEY_PASSWORD, v).apply()
+        get() = securePrefs.getString(KEY_PASSWORD, DEFAULT_PASSWORD) ?: DEFAULT_PASSWORD
+        set(v) = securePrefs.edit().putString(KEY_PASSWORD, v).apply()
 
     /** True until a specific dash has been identified — connect by prefix discovery. */
     val needsDiscovery: Boolean get() = ssid.isBlank()
 
     /** Forget the learned dash so the next connect re-runs prefix discovery. */
     fun forgetDash() { ssid = "" }
+
+    /** One-time migration: move a password written by an older build into encrypted storage. */
+    private fun migratePlaintextPassword() {
+        if (!prefs.contains(KEY_PASSWORD)) return
+        val legacy = prefs.getString(KEY_PASSWORD, null) ?: return
+        securePrefs.edit().putString(KEY_PASSWORD, legacy).apply()
+        prefs.edit().remove(KEY_PASSWORD).apply()
+    }
 
     companion object {
         private const val KEY_PREFIX   = "ssid_prefix"
