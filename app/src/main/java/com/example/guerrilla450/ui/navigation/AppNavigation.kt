@@ -39,7 +39,6 @@ sealed class Screen(val route: String) {
     object Home     : Screen("home")
     object Route    : Screen("route")
     object Dash     : Screen("dash")
-    object Garage   : Screen("garage")
     object Rides    : Screen("rides")
     object Settings : Screen("settings")
 }
@@ -47,11 +46,10 @@ sealed class Screen(val route: String) {
 private data class NavTab(val screen: Screen, val icon: ImageVector, val label: String)
 
 private val bottomTabs = listOf(
-    NavTab(Screen.Home,   GuerrillaIcons.Home,    "Home"),
-    NavTab(Screen.Route,  GuerrillaIcons.Navi,    "Route"),
-    NavTab(Screen.Dash,   GuerrillaIcons.Dash,    "Dash"),
-    NavTab(Screen.Garage, GuerrillaIcons.Wrench,  "Garage"),
-    NavTab(Screen.Rides,  GuerrillaIcons.History, "Rides"),
+    NavTab(Screen.Home,  GuerrillaIcons.Home,    "Home"),
+    NavTab(Screen.Route, GuerrillaIcons.Navi,    "Route"),
+    NavTab(Screen.Dash,  GuerrillaIcons.Dash,    "Dash"),
+    NavTab(Screen.Rides, GuerrillaIcons.History, "Rides"),
 )
 
 @Composable
@@ -94,10 +92,9 @@ fun AppNavigation(
 
     val showBottomNav = currentRoute in listOf(
         Screen.Home.route, Screen.Route.route, Screen.Dash.route,
-        Screen.Garage.route, Screen.Rides.route,
+        Screen.Rides.route,
     )
 
-    val garageTab by appViewModel.garageTab.collectAsState()
     val routeState by routeViewModel.state.collectAsState()
 
     // Single source of truth for connection status: the real dash stage. Fixes Home
@@ -168,7 +165,6 @@ fun AppNavigation(
                                 // back stack stays consistent with the bottom bar (see navigateTab).
                                 "route" -> navigateTab(Screen.Route.route)
                                 "dash" -> navigateTab(Screen.Dash.route)
-                                "garage" -> navigateTab(Screen.Garage.route)
                                 // Settings is a detail screen (its own back), not a tab.
                                 "settings" -> navController.navigate(Screen.Settings.route)
                             }
@@ -199,13 +195,6 @@ fun AppNavigation(
 
                 composable(Screen.Dash.route) {
                     DashScreen(vm = dashViewModel)
-                }
-
-                composable(Screen.Garage.route) {
-                    GarageScreen(
-                        tab = garageTab,
-                        onTabChange = { appViewModel.setGarageTab(it) },
-                    )
                 }
 
                 composable(Screen.Rides.route) {

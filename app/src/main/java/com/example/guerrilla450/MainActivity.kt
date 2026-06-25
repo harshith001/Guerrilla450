@@ -34,18 +34,6 @@ class MainActivity : ComponentActivity() {
             }.also { FirebaseAuth.getInstance().addAuthStateListener(it) }
         }
 
-        // Maintenance + document-expiry reminders on app open (fire even if Garage is never
-        // opened). Only on a fresh launch — savedInstanceState != null means this is a config
-        // change (e.g. rotation), where re-running it is wasted work.
-        if (savedInstanceState == null) {
-            Thread {
-                com.example.guerrilla450.data.MaintenanceNotifier.check(
-                    applicationContext, sync.maintenanceItems(), sync.odometer().toInt()
-                )
-                com.example.guerrilla450.data.MaintenanceNotifier.checkDocuments(applicationContext, sync.documents())
-            }.start()
-        }
-
         handleIntent(intent)
         setContent {
             GuerrillaTheme {
