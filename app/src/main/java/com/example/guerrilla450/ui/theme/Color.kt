@@ -20,14 +20,14 @@ val TextMid = Color(0xFF9EA0A3)
 val TextLo  = Color(0xFF65686B)
 val TextDis = Color(0xFF44474A)
 
-// ---- Accent: warm bronze gold ----
-val Gold       = Color(0xFFB4945A)
-val GoldBright = Color(0xFFC9A870)
-val GoldDeep   = Color(0xFF8B6E3E)
-val GoldTint   = Color(0x24B4945A)
-val GoldTint2  = Color(0x3DB4945A)
-val GoldGlow   = Color(0x59B4945A)
-val OnGold     = Color(0xFF1A1402)
+// ---- Accent: warm tan ----
+val Gold       = Color(0xFFA68164)
+val GoldBright = Color(0xFFBF9A7C)
+val GoldDeep   = Color(0xFF7D6149)
+val GoldTint   = Color(0x24A68164)
+val GoldTint2  = Color(0x3DA68164)
+val GoldGlow   = Color(0x59A68164)
+val OnGold     = Color(0xFF1A1008)
 
 // ---- Status ----
 val Warn    = Color(0xFFD8853E)
