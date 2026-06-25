@@ -42,6 +42,7 @@ class MapRenderer(private val tiles: TileProvider) {
         val etaSecondary: String? = null,  // smaller line, e.g. "18 km · 13:32"
         val gpsWeak: Boolean = false,      // imprecise/slow fix → amber marker + "GPS weak" pill
         val gpsLost: Boolean = false,      // no fresh fix → grey marker + "GPS lost" pill
+        val showTraffic: Boolean = true,   // draw live congestion overlay on top of base tiles
     )
 
     private val bgColor   = Color.rgb(229, 227, 223) // Google Maps land colour, behind missing tiles
@@ -53,6 +54,11 @@ class MapRenderer(private val tiles: TileProvider) {
         // saturation nudge to help against the dash TFT's daylight wash-out. No
         // brightness/contrast tricks (those flattened or clipped the map before).
         colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(1.2f) })
+    }
+    // Traffic overlay tiles are drawn on top of base tiles. Slightly higher saturation so
+    // red/orange/green congestion colours pop on the dash TFT's daylight wash-out.
+    private val trafficPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(1.4f) })
     }
     private val routeCasing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; style = Paint.Style.STROKE
@@ -142,6 +148,18 @@ class MapRenderer(private val tiles: TileProvider) {
             val dstT = (ty * ts - top).toFloat()
             tmpRect.set(dstL, dstT, dstL + ts, dstT + ts)
             drawTileBestEffort(canvas, f.zoom, tx, ty, tmpRect)
+        }
+
+        // ── Traffic overlay (memory-only; missing tiles are silently skipped) ──
+        if (f.showTraffic) {
+            for (tx in txMin..txMax) for (ty in tyMin..tyMax) {
+                tiles.getTraffic(f.zoom, tx, ty)?.let { bmp ->
+                    val dstL = (tx * ts - left).toFloat()
+                    val dstT = (ty * ts - top).toFloat()
+                    tmpRect.set(dstL, dstT, dstL + ts, dstT + ts)
+                    canvas.drawBitmap(bmp, null, tmpRect, trafficPaint)
+                }
+            }
         }
 
         // ── Road route polyline ──

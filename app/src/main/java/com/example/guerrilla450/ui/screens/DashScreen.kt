@@ -450,6 +450,30 @@ fun DashScreen(vm: DashViewModel = viewModel()) {
             GuerrillaToggle(on = ui.headingUp, onChange = { vm.toggleHeadingUp() })
         }
 
+        Spacer(Modifier.height(10.dp))
+
+        // Live traffic toggle
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Surf1)
+                .border(1.dp, Line, RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(com.example.guerrilla450.ui.GuerrillaIcons.TrafficLight, null, tint = if (ui.showTraffic) Gold else TextMid, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(11.dp))
+                Column {
+                    Text("Live traffic", color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontFamily = GeistFamily)
+                    Text(if (ui.showTraffic) "Congestion overlay on" else "Off", color = TextLo, fontSize = 11.5.sp, modifier = Modifier.padding(top = 1.dp))
+                }
+            }
+            GuerrillaToggle(on = ui.showTraffic, onChange = { vm.toggleTraffic() })
+        }
+
         Spacer(Modifier.height(16.dp))
 
         // Controls: joystick + zoom (drive the actual dash map)

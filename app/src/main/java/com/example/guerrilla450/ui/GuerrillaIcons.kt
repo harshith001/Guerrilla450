@@ -113,6 +113,13 @@ object GuerrillaIcons {
         "M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z",
         "M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
     )
+
+    val TrafficLight: ImageVector = pathVec(
+        "M9 2h6v20H9z",
+        "M13.5 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z",
+        "M13.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z",
+        "M13.5 17.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z",
+    )
 }
 
 private fun pathVec(vararg paths: String, strokeWidth: Float = 1.7f): ImageVector =

@@ -57,6 +57,7 @@ data class DashUiState(
     val recalculating: Boolean = false, // off-route long enough / actively rerouting → ETA frozen, pill shows "Recalculating"
     val headingUp: Boolean = true,
     val followMode: Boolean = true,
+    val showTraffic: Boolean = true,
     val thermal: String = "OK",
     val needsWifiOn: Boolean = false,   // Wi‑Fi radio is off → UI prompts to enable it
     // For the in-app Google Map view
@@ -684,6 +685,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(headingUp = headingUp) }
     }
 
+    fun toggleTraffic() { _ui.update { it.copy(showTraffic = !it.showTraffic) } }
+
     private fun manualPan(dx: Float, dy: Float) {
         panX += dx; panY += dy
         followMode = false
@@ -1169,6 +1172,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
             etaSecondary = etaSecondary,
             gpsWeak = gpsStatus == GpsStatus.WEAK,
             gpsLost = gpsStatus == GpsStatus.LOST,
+            showTraffic = _ui.value.showTraffic,
         )
         val canvas = Canvas(bmp)
         mapRenderer.draw(canvas, frame)

@@ -49,6 +49,11 @@ class TileProvider(context: Context, private val scope: CoroutineScope) {
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
         private const val MAX_PREFETCH_TILES = 600
         private const val MIN_FETCH_GAP_MS = 60L // be gentle on OSM + the radio
+        // Roadmap tiles with live traffic baked in (red/orange/green congestion colouring).
+        // Memory-only — traffic data changes every few minutes so disk-caching would serve stale.
+        private const val TRAFFIC_URL_TEMPLATE =
+            "https://mt1.google.com/vt/lyrs=m,traffic&hl=en&z=%d&x=%d&y=%d"
+        private const val TRAFFIC_CACHE_BYTES = 16 * 1024 * 1024 // 16 MB
 
         /** ~1/5 of the app heap for the tile cache, clamped to a sane 48–128 MB. */
         private fun memoryCacheBytes(ctx: Context): Int {
@@ -69,6 +74,10 @@ class TileProvider(context: Context, private val scope: CoroutineScope) {
     }
     private val inflight = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var lastFetchAt = 0L
+    private val trafficMemory = object : LruCache<String, Bitmap>(TRAFFIC_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+    }
+    private val trafficInflight = ConcurrentHashMap.newKeySet<String>()
 
     /** Non-blocking: returns the cached tile, else kicks off async load. */
     fun get(z: Int, x: Int, y: Int): Bitmap? {
@@ -87,6 +96,30 @@ class TileProvider(context: Context, private val scope: CoroutineScope) {
                     if (raw != null) memory.put(key, raw)
                 } finally {
                     inflight.remove(key)
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Live traffic overlay tile — roadmap + congestion colours (red/orange/green). Memory-only,
+     * no disk cache. Returns null while loading or when offline (dash WiFi only, no internet);
+     * the renderer silently skips missing cells so the base map always shows through.
+     */
+    fun getTraffic(z: Int, x: Int, y: Int): Bitmap? {
+        if (z < 11) return null
+        val max = 1 shl z
+        if (y < 0 || y >= max) return null
+        val xw = ((x % max) + max) % max
+        val key = "$z/$xw/$y"
+        trafficMemory.get(key)?.let { return it }
+        if (trafficInflight.add(key)) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    fetchTrafficTile(z, xw, y)?.let { trafficMemory.put(key, it) }
+                } finally {
+                    trafficInflight.remove(key)
                 }
             }
         }
@@ -222,6 +255,24 @@ class TileProvider(context: Context, private val scope: CoroutineScope) {
         } catch (e: Exception) {
             Log.w(TAG, "Tile $key fetch failed: ${e.message}")
             null
+        }
+    }
+
+    private fun fetchTrafficTile(z: Int, x: Int, y: Int): Bitmap? {
+        val net = internetNetwork() ?: return null  // needs internet — not available on dash-only WiFi
+        return try {
+            val url = URL(TRAFFIC_URL_TEMPLATE.format(z, x, y))
+            val conn = (net.openConnection(url) as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", USER_AGENT)
+                connectTimeout = 6_000
+                readTimeout = 6_000
+            }
+            if (conn.responseCode !in 200..299) { conn.disconnect(); return null }
+            val bytes = conn.inputStream.use { it.readBytes() }
+            conn.disconnect()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            Log.w(TAG, "Traffic $z/$x/$y: ${e.message}"); null
         }
     }
 
