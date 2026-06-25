@@ -8,14 +8,6 @@ Guerrilla 450 is an open-source Android app for the **Royal Enfield Himalayan 45
 
 ---
 
-## Credits
-
-This project is built on the foundation laid by **[adityadasika21](https://github.com/adityadasika21)**, the original creator of [NorthStar](https://github.com/adityadasika21/NorthStar) — the pioneering open-source app that first cracked the Tripper dash protocol and proved that screen-off navigation on the Himalayan 450 was possible. None of this exists without his work.
-
-The dash protocol understanding is also cross-checked against [**better-dash**](https://github.com/norbertFeron/better-dash) by Norbert Feron (Apache-2.0); see [`NOTICE`](NOTICE).
-
----
-
 
 ---
 
@@ -79,3 +71,11 @@ The navigation core — discover, connect, stream, route, reroute, free-roam, vo
 Licensed under the **Apache License, Version 2.0** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 **Trademarks / affiliation:** Guerrilla 450 is an independent community project and is **not affiliated with, endorsed by, or supported by Royal Enfield**. "Royal Enfield", "Himalayan", and "Tripper" are trademarks of their respective owners, used here only descriptively to identify compatible hardware. The dash link is unofficial and exists solely for interoperability with hardware you own — use at your own risk.
+
+
+
+## Credits
+
+This project is built on the foundation laid by **[adityadasika21](https://github.com/adityadasika21)**, the original creator of [NorthStar](https://github.com/adityadasika21/NorthStar) — the pioneering open-source app that first cracked the Tripper dash protocol and proved that screen-off navigation on the Himalayan 450 was possible. None of this exists without his work.
+
+The dash protocol understanding is also cross-checked against [**better-dash**](https://github.com/norbertFeron/better-dash) by Norbert Feron (Apache-2.0); see [`NOTICE`](NOTICE).
