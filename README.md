@@ -16,28 +16,6 @@ The dash protocol understanding is also cross-checked against [**better-dash**](
 
 ---
 
-## Why
-
-Mirroring the phone screen to the dash keeps the phone's OLED lit the whole time and streams what's on screen. On a long ride in the sun that overheats the phone and drains the battery fast.
-
-Guerrilla 450 takes a different approach:
-
-> It renders the map **off-screen**, hardware-encodes it to **H.264**, and streams it to the dash over the bike's WiFi — so the phone screen can stay **completely OFF** the entire ride.
-
-That single architectural difference is the whole point of the project.
-
----
-
-## Features
-
-- **Navigation** — share a destination from Google Maps, preview the road route, send it to the dash. Real distance + ETA, a glanceable ETA pill on the map, and automatic **off-route rerouting**.
-- **Voice guidance** — off / chime-before-turns / full spoken turn-by-turn (on-device TTS, no cloud).
-- **Beautiful keyless maps** — MapLibre + [OpenFreeMap](https://openfreemap.org) vector tiles. **No Google Maps API key required.**
-- **Works on any Tripper** — auto-discovers any `RE_*` dash over WiFi and remembers yours; auth handshake + stream in one tap, with auto-reconnect.
-- **Ride history** — every connect→disconnect session is recorded automatically: distance, duration, avg/max speed, and a track map.
-- **Garage** — maintenance log (chain, oil, filters, brakes, coolant) with interval tracking + **due reminders**, plus a fuel diary with automatic mileage (km/l), efficiency trends, and cost tracking.
-- **Optional sync** — works 100% offline-local by default; bring your own free Firebase project for cross-device sync if you want it.
-- **Built for endurance** — hardware H.264 encode at low bitrate, frame caching, WiFi/wake locks, and thermal back-off, all so the screen-off ride stays cool.
 
 ---
 
