@@ -67,6 +67,16 @@ data class DashUiState(
     val riderBearing: Float = 0f,
     val destLatLng: Pair<Double, Double>? = null,
     val routePoints: List<GeoPoint> = emptyList(),
+    // Idle wallpaper
+    val wallpaperPath: String? = null,
+    val wallpaperKind: com.example.guerrilla450.data.DashWallpaperKind? = null,
+    val wallpaperFit: com.example.guerrilla450.data.DashWallpaperFit = com.example.guerrilla450.data.DashWallpaperFit.CROP,
+    val wallpaperCropX: Float = 0f,
+    val wallpaperCropY: Float = 0f,
+    val wallpaperGalleryCount: Int = 0,
+    val wallpaperGalleryIndex: Int = 0,
+    val wallpaperSaving: Boolean = false,
+    val wallpaperError: String? = null,
 )
 
 class DashViewModel(app: Application) : AndroidViewModel(app) {
@@ -89,7 +99,9 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     private var recordJob: Job? = null
     private val tiles       = TileProvider(app, viewModelScope)
     private val location    = LocationTracker(app)
-    private val mapRenderer = MapRenderer(tiles)
+    private val mapRenderer    = MapRenderer(tiles)
+    private val wallpaperStore = com.example.guerrilla450.data.DashWallpaperStore(app)
+    private val idleRenderer   = com.example.guerrilla450.dash.video.DashIdleRenderer()
     private val mediaInfo   = com.example.guerrilla450.media.MediaInfoProvider(app)
     private val callController = com.example.guerrilla450.media.CallController(app)
     private var mediaObserveJob: Job? = null
@@ -183,6 +195,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var matchedLng: Double? = null
 
     // Frame cache (avoid the expensive redraw when nothing changed)
+    @Volatile private var wallpaperFrameRevision = 0
     private var frameBitmap: Bitmap? = null
     private var lastSignature = ""
     private var lastRedrawAt = 0L
@@ -285,6 +298,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // Reflect the rider's stored dash WiFi config (SSID may be blank until discovered).
         _ui.update { it.copy(ssid = dashConfig.ssid, wifiPassword = dashConfig.password) }
+        publishWallpaper(wallpaperStore.currentInfo())
 
         // When we connect to a previously-unknown dash by prefix, learn + persist its exact
         // SSID so subsequent connects target it directly (no system picker again).
@@ -397,10 +411,13 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
                 active  && code == BTN_REJECT -> { endCall(call!!);    "Call ended" }
                 // Map/media controls run whenever a call ISN'T ringing (still usable during an active
                 // call — only DOWN is reserved for hang-up, and that's not a map/media code anyway).
-                !ringing && code == BTN_MAP_ZOOM_IN  -> { zoomIn();  "Zoom in (map)" }
-                !ringing && code == BTN_MAP_ZOOM_OUT -> { zoomOut(); "Zoom out (map)" }
-                !ringing && code == BTN_MEDIA_NEXT -> { mediaInfo.skipNext(); "Next track" }
-                !ringing && code == BTN_MEDIA_PREV -> { mediaInfo.skipPrevious(); "Previous track" }
+                // Idle: joystick cycles wallpaper instead of map zoom / media
+                !ringing && isIdleWallpaperMode() && (code == BTN_MAP_ZOOM_IN  || code == BTN_MEDIA_NEXT) -> { cycleWallpaper(1);  "Next wallpaper" }
+                !ringing && isIdleWallpaperMode() && (code == BTN_MAP_ZOOM_OUT || code == BTN_MEDIA_PREV) -> { cycleWallpaper(-1); "Prev wallpaper" }
+                !ringing && !isIdleWallpaperMode() && code == BTN_MAP_ZOOM_IN  -> { zoomIn();  "Zoom in (map)" }
+                !ringing && !isIdleWallpaperMode() && code == BTN_MAP_ZOOM_OUT -> { zoomOut(); "Zoom out (map)" }
+                !ringing && !isIdleWallpaperMode() && code == BTN_MEDIA_NEXT -> { mediaInfo.skipNext(); "Next track" }
+                !ringing && !isIdleWallpaperMode() && code == BTN_MEDIA_PREV -> { mediaInfo.skipPrevious(); "Previous track" }
                 else -> "code 0x${code.toString(16).uppercase()}"
             }
             // Persist every button code so untethered tests are diagnosable from the remote pull
@@ -703,6 +720,111 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleTraffic() { _ui.update { it.copy(showTraffic = !it.showTraffic) } }
+
+    // ── Idle wallpaper ──────────────────────────────────────────────────────
+
+    fun setWallpaperFromUri(
+        uri: android.net.Uri,
+        horizontalBias: Float = 0f,
+        verticalBias: Float = 0f,
+        fit: com.example.guerrilla450.data.DashWallpaperFit = com.example.guerrilla450.data.DashWallpaperFit.CROP,
+    ) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _ui.update { it.copy(wallpaperSaving = true, wallpaperError = null) }
+            runCatching {
+                wallpaperStore.saveFromUri(uri, horizontalBias, verticalBias, fit)
+                wallpaperStore.currentInfo()
+            }.onSuccess { info ->
+                invalidateWallpaperFrame()
+                publishWallpaper(info, saving = false, error = null)
+            }.onFailure { err ->
+                val msg = err.message ?: "Unable to save wallpaper"
+                _ui.update { it.copy(wallpaperSaving = false, wallpaperError = msg) }
+            }
+        }
+    }
+
+    fun addWallpapersFromUris(uris: List<android.net.Uri>) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _ui.update { it.copy(wallpaperSaving = true, wallpaperError = null) }
+            runCatching {
+                wallpaperStore.saveManyFromUris(uris)
+                wallpaperStore.currentInfo()
+            }.onSuccess { info ->
+                invalidateWallpaperFrame()
+                publishWallpaper(info, saving = false, error = null)
+            }.onFailure { err ->
+                val msg = err.message ?: "Unable to save wallpapers"
+                _ui.update { it.copy(wallpaperSaving = false, wallpaperError = msg) }
+            }
+        }
+    }
+
+    fun updateCurrentWallpaperOptions(
+        horizontalBias: Float,
+        verticalBias: Float,
+        fit: com.example.guerrilla450.data.DashWallpaperFit,
+    ) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _ui.update { it.copy(wallpaperSaving = true, wallpaperError = null) }
+            runCatching {
+                wallpaperStore.updateCurrentOptions(horizontalBias, verticalBias, fit)
+                    ?: error("No wallpaper selected")
+            }.onSuccess { info ->
+                invalidateWallpaperFrame()
+                publishWallpaper(info, saving = false, error = null)
+            }.onFailure { err ->
+                val msg = err.message ?: "Unable to update wallpaper"
+                _ui.update { it.copy(wallpaperSaving = false, wallpaperError = msg) }
+            }
+        }
+    }
+
+    fun clearWallpaper() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val next = wallpaperStore.clearCurrent()
+            invalidateWallpaperFrame()
+            publishWallpaper(next, saving = false, error = null)
+        }
+    }
+
+    fun cycleWallpaperFromSettings(delta: Int) = cycleWallpaper(delta)
+
+    private fun cycleWallpaper(delta: Int) {
+        val next = wallpaperStore.cycle(delta)
+        invalidateWallpaperFrame()
+        publishWallpaper(next)
+    }
+
+    private fun invalidateWallpaperFrame() {
+        wallpaperFrameRevision++
+        lastSignature = ""
+        lastRedrawAt = 0L
+    }
+
+    private fun publishWallpaper(
+        info: com.example.guerrilla450.data.DashWallpaperInfo?,
+        saving: Boolean = _ui.value.wallpaperSaving,
+        error: String? = _ui.value.wallpaperError,
+    ) {
+        val gallery = wallpaperStore.allInfos()
+        val index = info?.let { cur -> gallery.indexOfFirst { it.slot == cur.slot } } ?: -1
+        _ui.update {
+            it.copy(
+                wallpaperPath = info?.path,
+                wallpaperKind = info?.kind,
+                wallpaperFit = info?.fit ?: com.example.guerrilla450.data.DashWallpaperFit.CROP,
+                wallpaperCropX = info?.horizontalBias ?: 0f,
+                wallpaperCropY = info?.verticalBias ?: 0f,
+                wallpaperGalleryCount = gallery.size,
+                wallpaperGalleryIndex = if (index >= 0) index else 0,
+                wallpaperSaving = saving,
+                wallpaperError = error,
+            )
+        }
+    }
+
+    private fun isIdleWallpaperMode() = destLat == null && destLng == null && route == null
 
     private fun manualPan(dx: Float, dy: Float) {
         panX += dx; panY += dy
@@ -1078,6 +1200,15 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         val camHeading = if (haveTarget) camHdg else heading
 
         val sig = buildString {
+            if (route == null && destLat == null && destLng == null) {
+                append("idle:${_ui.value.wallpaperPath}")
+                append(_ui.value.wallpaperKind)
+                append(_ui.value.wallpaperFit)
+                append(_ui.value.wallpaperCropX)
+                append(_ui.value.wallpaperCropY)
+                append(_ui.value.wallpaperGalleryIndex)
+                append(wallpaperFrameRevision)
+            }
             // High resolution (6 dp ≈ 0.1 m, 0.1° heading) so every smoothed step redraws
             // for buttery motion. Safe from standstill jitter because the camera is fed the
             // SMOOTHED position (which settles and stops), not raw GPS.
@@ -1144,6 +1275,20 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         centerLat: Double, centerLng: Double, heading: Float, remainingM: Double?,
     ) {
         val bmp = frameBitmap ?: return
+        if (route == null && destLat == null && destLng == null) {
+            val canvas = Canvas(bmp)
+            idleRenderer.draw(
+                canvas,
+                _ui.value.wallpaperPath,
+                _ui.value.wallpaperKind,
+                _ui.value.wallpaperCropX,
+                _ui.value.wallpaperCropY,
+                _ui.value.wallpaperFit,
+            )
+            drawDashOverlays(canvas, bmp.width, bmp.height)
+            _previewFrame.value = bmp.copy(Bitmap.Config.ARGB_8888, false)
+            return
+        }
         val loc = location.location.value
         // Glanceable ETA — minutes remaining + a stable 12-hour arrival clock. Both come
         // from the smoothed estimate so they don't flicker every second.
@@ -1325,6 +1470,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         streamJob?.cancel(); streamJob = null
         stopMediaForwarding()
         encoder?.release(); encoder = null
+        idleRenderer.release()
         frameBitmap?.recycle(); frameBitmap = null
         _previewFrame.value = null   // drop the stale dash frame so the preview falls back to the live map
     }

@@ -206,6 +206,7 @@ fun AppNavigation(
                         conn = conn,
                         onConnChange = { appViewModel.setConn(it) },
                         authViewModel = authViewModel,
+                        dashViewModel = dashViewModel,
                         onSignedOut = {
                             com.example.guerrilla450.data.AuthPrefs.setOnboarded(ctx, false)
                             navController.navigate(Screen.Login.route) {

@@ -1,21 +1,30 @@
 package com.example.guerrilla450.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.Lifecycle
@@ -23,11 +32,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.guerrilla450.data.DashWallpaperFit
+import com.example.guerrilla450.data.DashWallpaperKind
+import com.example.guerrilla450.data.DashWallpaperPaths
 import com.example.guerrilla450.ui.GuerrillaIcons
 import com.example.guerrilla450.ui.components.*
 import com.example.guerrilla450.ui.theme.*
 import com.example.guerrilla450.viewmodel.AuthViewModel
 import com.example.guerrilla450.viewmodel.ConnectionState
+import com.example.guerrilla450.viewmodel.DashViewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -35,6 +48,7 @@ fun SettingsScreen(
     conn: ConnectionState,
     onConnChange: (ConnectionState) -> Unit,
     authViewModel: AuthViewModel,
+    dashViewModel: DashViewModel,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -49,6 +63,37 @@ fun SettingsScreen(
     var screenOff   by remember { mutableStateOf(true) }
     var keepAwake   by remember { mutableStateOf(true) }
     var units       by remember { mutableStateOf("Kilometres") }
+
+    val dashUi by dashViewModel.ui.collectAsState()
+    var pendingWallpaperUri     by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingWallpaperPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var cropX    by remember { mutableStateOf(0f) }
+    var cropY    by remember { mutableStateOf(0f) }
+    var fitMode  by remember { mutableStateOf(DashWallpaperFit.CROP) }
+
+    val wallpaperMultiPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(DashWallpaperPaths.MAX_SLOTS)
+    ) { uris ->
+        if (uris.size == 1) {
+            val uri = uris.first()
+            pendingWallpaperUri = uri
+            cropX = 0f; cropY = 0f
+            fitMode = DashWallpaperFit.CROP
+            pendingWallpaperPreview = wallpaperPreviewFromUri(ctx, uri)
+        } else if (uris.isNotEmpty()) {
+            pendingWallpaperUri = null; pendingWallpaperPreview = null
+            dashViewModel.addWallpapersFromUris(uris)
+        }
+    }
+
+    val wallpaperPreview = remember(dashUi.wallpaperPath, dashUi.wallpaperKind) {
+        dashUi.wallpaperPath?.let { path ->
+            when (dashUi.wallpaperKind) {
+                DashWallpaperKind.VIDEO -> wallpaperPreviewFromVideo(path)
+                else -> runCatching { android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
+            }
+        }
+    }
 
     // Real voice setting, shared with RouteScreen via the VoiceManager singleton.
     val ctx = LocalContext.current
@@ -169,6 +214,132 @@ fun SettingsScreen(
                     { callPermLauncher.launch(android.Manifest.permission.ANSWER_PHONE_CALLS) }
                 },
             )
+        }
+
+        SectionLabel("Dash Wallpaper")
+        GuerrillaCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(38.dp).clip(RoundedCornerShape(11.dp))
+                        .background(Surf2).border(1.dp, Line, RoundedCornerShape(11.dp)),
+                ) { Icon(GuerrillaIcons.Dash, contentDescription = null, tint = TextMid, modifier = Modifier.size(19.dp)) }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        when {
+                            pendingWallpaperPreview != null -> if (pendingWallpaperUri == null) "Edit selected" else "Adjust crop"
+                            dashUi.wallpaperSaving -> "Saving…"
+                            dashUi.wallpaperPath == null -> "Default idle screen"
+                            else -> "Gallery ${dashUi.wallpaperGalleryIndex + 1} of ${dashUi.wallpaperGalleryCount}"
+                        },
+                        color = TextHi, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, fontFamily = GeistFamily,
+                    )
+                    Text(
+                        "Up to 5 images, GIFs or videos · joystick L/R to cycle while idle",
+                        color = TextLo, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+            dashUi.wallpaperError?.let { error ->
+                Text(error, color = androidx.compose.ui.graphics.Color(0xFFE05252.toInt()), fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 10.dp))
+            }
+            val previewImg = if (pendingWallpaperPreview != null) pendingWallpaperPreview else wallpaperPreview
+            if (previewImg != null) {
+                Spacer(Modifier.height(14.dp))
+                DashCropPreview(
+                    image = previewImg,
+                    horizontalBias = if (pendingWallpaperPreview != null) cropX else dashUi.wallpaperCropX,
+                    verticalBias   = if (pendingWallpaperPreview != null) cropY else dashUi.wallpaperCropY,
+                    fit            = if (pendingWallpaperPreview != null) fitMode else dashUi.wallpaperFit,
+                    modifier = Modifier.fillMaxWidth().let {
+                        if (pendingWallpaperPreview == null && dashUi.wallpaperGalleryCount > 1) {
+                            it.pointerInput(dashUi.wallpaperGalleryCount) {
+                                var dragX = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { dragX = 0f },
+                                    onHorizontalDrag = { _, amount -> dragX += amount },
+                                    onDragEnd = {
+                                        if (kotlin.math.abs(dragX) > 60f)
+                                            dashViewModel.cycleWallpaperFromSettings(if (dragX < 0) 1 else -1)
+                                    },
+                                )
+                            }
+                        } else it
+                    },
+                    showGuide = pendingWallpaperPreview == null,
+                )
+            }
+            if (pendingWallpaperPreview != null) {
+                Spacer(Modifier.height(12.dp))
+                GuerrillaSegmented(
+                    options = listOf("Crop", "Fit height", "Fit width"),
+                    selected = fitMode.label(),
+                    onSelect = { fitMode = it.toWallpaperFit() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (fitMode == DashWallpaperFit.CROP) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Horizontal", color = TextLo, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                    Slider(value = cropX, onValueChange = { cropX = it }, valueRange = -1f..1f, modifier = Modifier.fillMaxWidth())
+                    Text("Vertical", color = TextLo, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                    Slider(value = cropY, onValueChange = { cropY = it }, valueRange = -1f..1f, modifier = Modifier.fillMaxWidth())
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (pendingWallpaperPreview != null) {
+                    GuerrillaBtn(
+                        "Save", onClick = {
+                            val uri = pendingWallpaperUri
+                            if (uri != null) dashViewModel.setWallpaperFromUri(uri, cropX, cropY, fitMode)
+                            else dashViewModel.updateCurrentWallpaperOptions(cropX, cropY, fitMode)
+                            pendingWallpaperUri = null; pendingWallpaperPreview = null
+                        },
+                        icon = GuerrillaIcons.Check, variant = BtnVariant.Primary, size = BtnSize.Sm,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GuerrillaBtn(
+                        "Cancel", onClick = { pendingWallpaperUri = null; pendingWallpaperPreview = null },
+                        icon = GuerrillaIcons.X, variant = BtnVariant.Ghost, size = BtnSize.Sm,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    if (dashUi.wallpaperGalleryCount > 1) {
+                        GuerrillaIconBtn(icon = GuerrillaIcons.ChevronLeft, size = 40.dp,
+                            onClick = { dashViewModel.cycleWallpaperFromSettings(-1) })
+                    }
+                    GuerrillaBtn(
+                        "Add media", onClick = {
+                            wallpaperMultiPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        },
+                        icon = GuerrillaIcons.Plus, variant = BtnVariant.Primary, size = BtnSize.Sm,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (dashUi.wallpaperGalleryCount > 1) {
+                        GuerrillaIconBtn(icon = GuerrillaIcons.ChevronRight, size = 40.dp,
+                            onClick = { dashViewModel.cycleWallpaperFromSettings(1) })
+                    }
+                    if (dashUi.wallpaperPath != null) {
+                        GuerrillaBtn(
+                            "Edit", onClick = {
+                                pendingWallpaperUri = null
+                                pendingWallpaperPreview = wallpaperPreview
+                                cropX = dashUi.wallpaperCropX; cropY = dashUi.wallpaperCropY
+                                fitMode = dashUi.wallpaperFit
+                            },
+                            icon = GuerrillaIcons.Zap, variant = BtnVariant.Ghost, size = BtnSize.Sm,
+                            modifier = Modifier.weight(1f),
+                        )
+                        GuerrillaBtn(
+                            "Remove", onClick = { dashViewModel.clearWallpaper() },
+                            icon = GuerrillaIcons.Power, variant = BtnVariant.Danger, size = BtnSize.Sm,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
 
         SectionLabel("Voice & guidance")
@@ -308,6 +479,112 @@ private fun TestBuildCard() {
             )
         }
     }
+}
+
+private fun wallpaperPreviewFromUri(
+    context: android.content.Context,
+    uri: android.net.Uri,
+): androidx.compose.ui.graphics.ImageBitmap? {
+    val mime = context.contentResolver.getType(uri).orEmpty()
+    return if (mime.startsWith("video/")) {
+        runCatching {
+            val r = android.media.MediaMetadataRetriever()
+            try {
+                r.setDataSource(context, uri)
+                r.getFrameAtTime(0L, android.media.MediaMetadataRetriever.OPTION_CLOSEST)?.asImageBitmap()
+            } finally { r.release() }
+        }.getOrNull()
+    } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+        runCatching {
+            val src = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+            android.graphics.ImageDecoder.decodeBitmap(src) { d, _, _ ->
+                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }.asImageBitmap()
+        }.getOrNull()
+    } else {
+        context.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it)?.asImageBitmap() }
+    }
+}
+
+private fun wallpaperPreviewFromVideo(path: String): androidx.compose.ui.graphics.ImageBitmap? =
+    runCatching {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(path)
+            r.getFrameAtTime(0L, android.media.MediaMetadataRetriever.OPTION_CLOSEST)?.asImageBitmap()
+        } finally { r.release() }
+    }.getOrNull()
+
+@Composable
+private fun DashCropPreview(
+    image: androidx.compose.ui.graphics.ImageBitmap,
+    horizontalBias: Float,
+    verticalBias: Float,
+    fit: DashWallpaperFit,
+    modifier: Modifier = Modifier,
+    showGuide: Boolean = true,
+) {
+    Canvas(
+        modifier = modifier
+            .aspectRatio(526f / 300f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(androidx.compose.ui.graphics.Color(0xFF0B0D0E.toInt())),
+    ) {
+        if (fit == DashWallpaperFit.CROP) {
+            val srcRatio = image.width.toFloat() / image.height.toFloat()
+            val dstRatio = size.width / size.height
+            val (srcOff, srcSz) = if (srcRatio > dstRatio) {
+                val cropW = (image.height * dstRatio).toInt().coerceAtLeast(1)
+                val extra = (image.width - cropW).coerceAtLeast(0)
+                val left = ((extra / 2f) + (extra / 2f) * horizontalBias.coerceIn(-1f, 1f)).toInt()
+                androidx.compose.ui.unit.IntOffset(left, 0) to androidx.compose.ui.unit.IntSize(cropW, image.height)
+            } else {
+                val cropH = (image.width / dstRatio).toInt().coerceAtLeast(1)
+                val extra = (image.height - cropH).coerceAtLeast(0)
+                val top = ((extra / 2f) + (extra / 2f) * verticalBias.coerceIn(-1f, 1f)).toInt()
+                androidx.compose.ui.unit.IntOffset(0, top) to androidx.compose.ui.unit.IntSize(image.width, cropH)
+            }
+            drawImage(image, srcOffset = srcOff, srcSize = srcSz,
+                dstOffset = androidx.compose.ui.unit.IntOffset.Zero,
+                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()))
+        } else {
+            val scale = if (fit == DashWallpaperFit.FIT_HEIGHT) size.height / image.height.toFloat()
+                        else size.width / image.width.toFloat()
+            val drawW = (image.width * scale).toInt().coerceAtLeast(1)
+            val drawH = (image.height * scale).toInt().coerceAtLeast(1)
+            val left = (size.width.toInt() - drawW) / 2
+            val top  = (size.height.toInt() - drawH) / 2
+            drawImage(image,
+                srcOffset = androidx.compose.ui.unit.IntOffset.Zero,
+                srcSize = androidx.compose.ui.unit.IntSize(image.width, image.height),
+                dstOffset = androidx.compose.ui.unit.IntOffset(left, top),
+                dstSize = androidx.compose.ui.unit.IntSize(drawW, drawH))
+        }
+        if (showGuide) {
+            // Semi-circle guide showing the Tripper's round visible area.
+            val guideRadius = size.height * 0.89f
+            val guideLeft = (size.width - guideRadius * 2f) / 2f
+            drawArc(
+                color = Gold.copy(alpha = 0.85f),
+                startAngle = 180f, sweepAngle = 180f, useCenter = false,
+                topLeft = Offset(guideLeft, 0f),
+                size = Size(guideRadius * 2f, guideRadius * 2f),
+                style = Stroke(width = 2f),
+            )
+        }
+    }
+}
+
+private fun DashWallpaperFit.label() = when (this) {
+    DashWallpaperFit.CROP       -> "Crop"
+    DashWallpaperFit.FIT_HEIGHT -> "Fit height"
+    DashWallpaperFit.FIT_WIDTH  -> "Fit width"
+}
+
+private fun String.toWallpaperFit() = when (this) {
+    "Fit height" -> DashWallpaperFit.FIT_HEIGHT
+    "Fit width"  -> DashWallpaperFit.FIT_WIDTH
+    else         -> DashWallpaperFit.CROP
 }
 
 @Composable
