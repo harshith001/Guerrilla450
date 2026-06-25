@@ -29,7 +29,7 @@ rootProject.file("signing.properties").let { f ->
 val hasReleaseSigning = signingProps.getProperty("storeFile")?.let { File(it).exists() } == true
 
 android {
-    namespace = "com.example.northstar"
+    namespace = "com.example.guerrilla450"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -37,7 +37,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.northstar.app"
+        applicationId = "com.guerrilla450.app"
         // API 29 (Android 10) is the real floor: the dash link is built on WifiNetworkSpecifier
         // + ConnectivityManager.requestNetwork(specifier), both added in API 29, and that IS the
         // app. Below 29 the core feature can't run and the unguarded calls would crash, so we
