@@ -64,6 +64,9 @@ fun SettingsScreen(
     var keepAwake   by remember { mutableStateOf(true) }
     var units       by remember { mutableStateOf("Kilometres") }
 
+    // Real voice setting, shared with RouteScreen via the VoiceManager singleton.
+    val ctx = LocalContext.current
+
     val dashUi by dashViewModel.ui.collectAsState()
     var pendingWallpaperUri     by remember { mutableStateOf<android.net.Uri?>(null) }
     var pendingWallpaperPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -94,9 +97,6 @@ fun SettingsScreen(
             }
         }
     }
-
-    // Real voice setting, shared with RouteScreen via the VoiceManager singleton.
-    val ctx = LocalContext.current
     val voiceManager = remember { com.example.guerrilla450.dash.nav.VoiceManager.get(ctx) }
     val voiceMode by voiceManager.mode.collectAsState()
     val voice = when (voiceMode) {
