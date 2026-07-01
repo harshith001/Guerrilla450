@@ -259,10 +259,10 @@ class TileProvider(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun fetchTrafficTile(z: Int, x: Int, y: Int): Bitmap? {
-        val net = internetNetwork() ?: return null  // needs internet — not available on dash-only WiFi
+        val net = internetNetwork()
         return try {
             val url = URL(TRAFFIC_URL_TEMPLATE.format(z, x, y))
-            val conn = (net.openConnection(url) as HttpURLConnection).apply {
+            val conn = ((net?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", USER_AGENT)
                 connectTimeout = 6_000
                 readTimeout = 6_000

@@ -44,7 +44,7 @@ class DashIdleRenderer {
         when (kind) {
             DashWallpaperKind.GIF   -> drawGif(canvas, wallpaperPath, horizontalBias, verticalBias, fit)
             DashWallpaperKind.VIDEO -> drawVideo(canvas, wallpaperPath, horizontalBias, verticalBias, fit)
-            else -> loadBitmap(wallpaperPath)?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+            else -> loadBitmap(wallpaperPath)?.let { drawBitmap(canvas, it, horizontalBias, verticalBias, fit) }
         }
     }
 
@@ -68,10 +68,7 @@ class DashIdleRenderer {
         clearCache()
         cachedPath = path
         cachedKind = DashWallpaperKind.IMAGE
-        cachedBitmap = BitmapFactory.decodeFile(path)?.let { decoded ->
-            if (decoded.width == DashEncoder.WIDTH && decoded.height == DashEncoder.HEIGHT) decoded
-            else Bitmap.createScaledBitmap(decoded, DashEncoder.WIDTH, DashEncoder.HEIGHT, true).also { decoded.recycle() }
-        }
+        cachedBitmap = BitmapFactory.decodeFile(path)
         return cachedBitmap
     }
 
